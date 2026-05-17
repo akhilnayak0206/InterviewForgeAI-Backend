@@ -1,7 +1,13 @@
-# Python-generated files
+# Python
 __pycache__/
 **/__pycache__/
 *.py[oc]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 build/
 dist/
 wheels/
@@ -15,10 +21,11 @@ venv/
 env/
 **/env/
 
-# Environment variables
+# Environment and local config
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+*.local
 
 # IDE
 .vscode/
@@ -36,6 +43,8 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+*.dump
+*.sql
 
 # OS
 .DS_Store
@@ -48,7 +57,16 @@ node_modules/
 dist/
 build/
 
-# Project-specific secrets
+# Secrets and credentials
 secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
 config/secrets.yaml
 config/credentials.json

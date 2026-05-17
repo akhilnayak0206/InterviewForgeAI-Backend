@@ -41,3 +41,9 @@ http://127.0.0.1:8000/
 - `uv run` ensures the command runs inside the project-managed environment.
 - `--reload` enables automatic server restart when code changes are saved.
 - For production, remove `--reload` and consider running a dedicated process manager.
+
+
+uv run alembic revision --autogenerate -m "create users table"
+
+uv run alembic upgrade head
+

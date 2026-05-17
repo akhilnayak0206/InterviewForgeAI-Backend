@@ -27,7 +27,7 @@ cd /home/akhil/Desktop/code/InterviewForgeAI/interviewforgeai_backend
 2. Start the development server with `uv`:
 
 ```bash
-uv run uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+uv run uvicorn app.main:app --reload
 ```
 
 3. Open your browser or API client to:

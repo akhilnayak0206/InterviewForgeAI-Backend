@@ -4,7 +4,9 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import DateTime, func
+from typing import Optional
+
+from sqlalchemy import Boolean, Column, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, SQLModel
 
@@ -39,6 +41,9 @@ class TimestampMixin(CreatedAtMixin):
         sa_column_kwargs={"server_default": func.now(), "onupdate": func.now()},
     )
 
+class SoftDeleteMixin(SQLModel):
+    is_deleted: bool = Field(default=False, index=True)
+    deleted_at: Optional[datetime] = Field(default=None)
 
 class SessionStatus(str, Enum):
     draft = "draft"

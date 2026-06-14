@@ -58,7 +58,7 @@ def chat(
 
     try:
         result = ai_service.chat(
-            db=db,
+            session=db,
             interview_session=interview_session,
             user_content=chat_in.content,
         )

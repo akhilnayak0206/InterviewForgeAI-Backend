@@ -60,7 +60,7 @@ def chat(
         system_prompt=system_prompt,
         history=history,
     )
-    breakpoint()
+
     # Call OpenAI.
     ai_content, usage = _call_openai(
         messages=openai_messages,
@@ -154,7 +154,7 @@ def _format_messages_for_openai(
 
         messages.append(
             {
-                "role": msg.role.value,
+                "role": msg.role,
                 "content": msg.content,
             }
         )

@@ -8,8 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.database import engine
-from app.routes import auth_router, message_router, session_router, user_router
-
+from app.routes import auth_router, chat_router, message_router, session_router, user_router
 
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 HOST = os.getenv("HOST", "127.0.0.1")
@@ -99,6 +98,11 @@ app.include_router(
 
 app.include_router(
     message_router,
+    prefix=settings.API_V1_STR,
+)
+
+app.include_router(
+    chat_router,
     prefix=settings.API_V1_STR,
 )
 

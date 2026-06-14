@@ -19,6 +19,25 @@ class Settings(BaseSettings):
     # short enough to limit damage if stolen, long enough to not annoy users.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 360
 
+    # ── OpenAI Configuration ─────────────────────────────────────
+
+    # API key for authenticating with OpenAI (or compatible provider).
+    # Never commit this. Always load from environment.
+    OPENAI_API_KEY: str
+
+    # Which model to use. gpt-4o-mini is fast, cheap, and good enough for
+    # most interview coaching tasks. Upgrade to gpt-4o for harder topics.
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # Maximum tokens the model can generate in its response.
+    # This does NOT include prompt tokens — it's output-only.
+    # 1024 is ~750 words, plenty for an interview question + explanation.
+    OPENAI_MAX_TOKENS: int = 1024
+
+    # Temperature controls randomness: 0.0 = deterministic, 1.0 = creative.
+    # 0.7 is a sweet spot for interview coaching — structured but not robotic.
+    OPENAI_TEMPERATURE: float = 0.7
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlmodel import Session, select
 
+from app import db
 from app.core.config import settings
 from app.core.openai_client import openai_client
 from app.models.base import MessageRole
@@ -123,7 +124,7 @@ def _load_conversation_history(
         select(Message)
         .where(
             Message.session_id == session_id,
-            not Message.is_deleted,
+            Message.is_deleted.is_(False),
         )
         .order_by(Message.created_at.asc())
     )

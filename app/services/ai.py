@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def chat(
     *,
-    db: Session,
+    session: Session,
     interview_session: InterviewSession,
     user_content: str,
 ) -> dict[str, Any]:
@@ -38,7 +38,7 @@ def chat(
 
     # Save the user's message first so it becomes part of history.
     _save_message(
-        db=db,
+        session=session,
         session_id=interview_session.id,
         role=MessageRole.user,
         content=user_content,
@@ -46,7 +46,7 @@ def chat(
 
     # Load the complete conversation history.
     history = _load_conversation_history(
-        db=db,
+        session=session,
         session_id=interview_session.id,
     )
 
@@ -68,7 +68,7 @@ def chat(
 
     # Save assistant response.
     ai_message = _save_message(
-        db=db,
+        session=session,
         session_id=interview_session.id,
         role=MessageRole.assistant,
         content=ai_content,
@@ -89,7 +89,7 @@ def chat(
 
 def _save_message(
     *,
-    db: Session,
+    session: Session,
     session_id: uuid.UUID,
     role: MessageRole,
     content: str,
@@ -104,16 +104,16 @@ def _save_message(
         content=content,
     )
 
-    db.add(db_message)
-    db.commit()
-    db.refresh(db_message)
+    session.add(db_message)
+    session.commit()
+    session.refresh(db_message)
 
     return db_message
 
 
 def _load_conversation_history(
     *,
-    db: Session,
+    session: Session,
     session_id: uuid.UUID,
 ) -> list[Message]:
     """
@@ -129,7 +129,7 @@ def _load_conversation_history(
         .order_by(Message.created_at.asc())
     )
 
-    return list(db.exec(statement).all())
+    return list(session.exec(statement).all())
 
 
 def _format_messages_for_openai(

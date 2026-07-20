@@ -14,14 +14,20 @@ WHY A SINGLE CLIENT INSTANCE:
     database engine per request — wasteful and unnecessary.
 
 FUTURE:
-    When you add streaming, you'll add an AsyncOpenAI client here too.
     When you switch providers, this is the ONLY file that changes.
 """
 
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from app.core.config import settings
 
 openai_client = OpenAI(
+    base_url="https://api.groq.com/openai/v1", api_key=settings.OPENAI_API_KEY
+)
+
+# Async client for streaming endpoints.
+# Uses httpx.AsyncClient internally with connection pooling —
+# same efficiency benefits as the sync client, but non-blocking.
+async_openai_client = AsyncOpenAI(
     base_url="https://api.groq.com/openai/v1", api_key=settings.OPENAI_API_KEY
 )

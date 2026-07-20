@@ -44,5 +44,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # — Provider Configuration ——————————————————
+    # Which LLM provider to use for streaming. Supported values:
+    #   "openai"    → OpenAI or any OpenAI-compatible API (e.g. Groq)
+    #   "anthropic" → Anthropic Claude (requires `anthropic` package)
+    LLM_PROVIDER: str = "openai"
+
+    # Optional Anthropic configuration. Only required when LLM_PROVIDER=anthropic.
+    ANTHROPIC_API_KEY: str | None = None
+    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
+
 
 settings = Settings()

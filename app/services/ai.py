@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from sqlmodel import Session, select
 
-from app import db
 from app.core.config import settings
 from app.core.openai_client import openai_client
 from app.models.base import MessageRole
 from app.models.message import Message
 from app.models.session import InterviewSession
 from app.prompts import build_interviewer_system_prompt
+from interviewforgeai_backend.app.core.providers import get_provider
+from interviewforgeai_backend.app.core.sse import sse_event
 
 logger = logging.getLogger(__name__)
 
@@ -55,15 +57,15 @@ def chat(
         topic=interview_session.title,
     )
 
-    # Convert DB messages into OpenAI format.
-    openai_messages = _format_messages_for_openai(
+    # Convert DB messages into LLM format.
+    messages = _format_messages_for_llm(
         system_prompt=system_prompt,
         history=history,
     )
 
-    # Call OpenAI.
+    # Call LLM.
     ai_content, usage = _call_openai(
-        messages=openai_messages,
+        messages=messages,
     )
 
     # Save assistant response.
@@ -132,13 +134,13 @@ def _load_conversation_history(
     return list(session.exec(statement).all())
 
 
-def _format_messages_for_openai(
+def _format_messages_for_llm(
     *,
     system_prompt: str,
     history: list[Message],
 ) -> list[dict[str, str]]:
     """
-    Convert database messages into OpenAI chat format.
+    Convert database messages into LLM chat format.
     """
 
     messages: list[dict[str, str]] = [
@@ -186,3 +188,96 @@ def _call_openai(
     }
 
     return content, usage
+
+# PLEASE NOTE ONLY THIS SERVICE SUPPORTS MULTIPLE PROVIDERS
+async def stream_chat(
+    *,
+    session: Session,
+    interview_session: InterviewSession,
+    user_content: str,
+) -> AsyncGenerator[str, None]:
+    """
+    Stream AI response tokens as SSE events.
+
+    Flow:
+        1. Save user message (sync — happens before streaming starts)
+        2. Load conversation history
+        3. Build system prompt + format messages
+        4. Open streaming connection to OpenAI
+        5. Yield each token as an SSE event
+        6. After stream completes, save full response to DB
+        7. Yield a "done" event with the persisted message ID
+
+    Cancellation:
+        If the client disconnects mid-stream, asyncio.CancelledError
+        is raised. The finally block saves whatever was collected so
+        the partial response isn't lost.
+    """
+
+    # — Pre-stream: save user message + prepare context ——————————
+
+    _save_message(
+        session=session,
+        session_id=interview_session.id,
+        role=MessageRole.user,
+        content=user_content,
+    )
+
+    history = _load_conversation_history(
+        session=session,
+        session_id=interview_session.id,
+    )
+
+    system_prompt = build_interviewer_system_prompt(
+        topic=interview_session.title,
+    )
+
+    messages = _format_messages_for_llm(
+        system_prompt=system_prompt,
+        history=history,
+    )
+
+    # — Stream tokens from the configured provider ——————————————
+
+    provider = get_provider()
+    collected_tokens: list[str] = []
+    stream_completed = False
+
+    try:
+        async for token in provider.stream(messages):
+            collected_tokens.append(token)
+            yield sse_event("token", {"content": token})
+
+        stream_completed = True
+
+    except asyncio.CancelledError:
+        logger.info(
+            "Client disconnected mid-stream | session=%s | "
+            "tokens_collected=%d",
+            interview_session.id,
+            len(collected_tokens),
+        )
+        raise
+
+    finally:
+        # — Post-stream: persist the AI response ————————————
+        if collected_tokens:
+            full_content = "".join(collected_tokens)
+            ai_message = _save_message(
+                session=session,
+                session_id=interview_session.id,
+                role=MessageRole.assistant,
+                content=full_content,
+            )
+
+            logger.info(
+                "Stream %s | session=%s | tokens=%d | chars=%d",
+                "completed" if stream_completed else "partial (client disconnected)",
+                interview_session.id,
+                len(collected_tokens),
+                len(full_content),
+            )
+
+    # — Signal completion to the client ——————————————————
+
+    yield sse_event("done", {"message_id": str(ai_message.id)})

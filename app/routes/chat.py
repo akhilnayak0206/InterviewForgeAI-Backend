@@ -4,6 +4,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from openai import APIConnectionError, APIStatusError, RateLimitError
 from sqlmodel import Session
 
@@ -12,6 +13,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsage
 from app.services import ai_service, session_service
+from interviewforgeai_backend.app.core.sse import wrap_stream_with_sse_errors
 
 logger = logging.getLogger(__name__)
 
@@ -96,4 +98,46 @@ def chat(
     return ChatResponse(
         message=result["message"],
         usage=TokenUsage(**result["usage"]),
+    )
+
+# — Streaming endpoint ——————————————————
+
+@router.post(
+    "/stream",
+    summary="Send a message and stream the AI response via SSE",
+    responses={
+        502: {"description": "LLM provider error"},
+        429: {"description": "LLM rate limit exceeded"},
+    },
+)
+async def stream_chat(
+    session_id: uuid.UUID,
+    chat_in: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Stream AI response tokens as SSE (text/event-stream)."""
+
+    # — Authorization: verify session ownership (same as non-streaming) —
+
+    interview_session = session_service.get_session_for_user(
+        session=db,
+        session_id=session_id,
+        user_id=current_user.id,
+    )
+
+    return StreamingResponse(
+        wrap_stream_with_sse_errors(
+            ai_service.stream_chat(
+                session=db,
+                interview_session=interview_session,
+                user_content=chat_in.content,
+            ),
+            user_id=current_user.id,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

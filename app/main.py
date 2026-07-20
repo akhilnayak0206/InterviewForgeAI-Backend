@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.database import engine
-from app.routes import auth_router, chat_router, message_router, session_router, user_router
+from app.routes import auth_router, chat_router, message_router, session_router, user_router, interview_workflow_router
 
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 HOST = os.getenv("HOST", "127.0.0.1")
@@ -24,7 +24,7 @@ ALLOWED_ORIGINS = os.getenv(
 async def lifespan(app: FastAPI):
     try:
         with engine.connect() as connection:
-            print("Database connection successful")
+            print("Database connection successful", connection.engine.url)
 
     except Exception as error:
         print("Failed to connect to database")
@@ -103,6 +103,11 @@ app.include_router(
 
 app.include_router(
     chat_router,
+    prefix=settings.API_V1_STR,
+)
+
+app.include_router(
+    interview_workflow_router,
     prefix=settings.API_V1_STR,
 )
 

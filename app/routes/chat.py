@@ -13,7 +13,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.chat import ChatRequest, ChatResponse, TokenUsage
 from app.services import ai_service, session_service
-from interviewforgeai_backend.app.core.sse import wrap_stream_with_sse_errors
+from app.core.sse import wrap_stream_with_sse_errors
 
 logger = logging.getLogger(__name__)
 

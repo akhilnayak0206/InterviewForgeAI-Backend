@@ -13,8 +13,8 @@ from app.models.base import MessageRole
 from app.models.message import Message
 from app.models.session import InterviewSession
 from app.prompts import build_interviewer_system_prompt
-from interviewforgeai_backend.app.core.providers import get_provider
-from interviewforgeai_backend.app.core.sse import sse_event
+from app.core.providers import get_provider
+from app.core.sse import sse_event
 
 logger = logging.getLogger(__name__)
 

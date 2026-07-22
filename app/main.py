@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
+import logging
 import os
+import re
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -9,6 +11,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import engine
 from app.routes import auth_router, chat_router, message_router, session_router, user_router, interview_workflow_router
+from app.core.graph import close_checkpointer, init_checkpointer
 
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 HOST = os.getenv("HOST", "127.0.0.1")
@@ -18,6 +21,8 @@ ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:3000",
 ).split(",")
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -31,8 +36,18 @@ async def lifespan(app: FastAPI):
         print(error)
         raise
 
+    # Initialize shared LangGraph PostgreSQL checkpointer
+    try:
+        await init_checkpointer()
+    except Exception as error:
+        print("Failed to initialize checkpointer:")
+        print(error)
+        print("Workflows will not be available.")
+
     yield
 
+    # Cleanup: close the checkpointer pool
+    await close_checkpointer()
     print("Application shutting down")
 
 

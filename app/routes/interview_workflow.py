@@ -5,7 +5,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 from pydantic import BaseModel, Field
@@ -18,7 +18,8 @@ from app.models.base import MessageRole
 from app.models.user import User
 from app.schemas.message import MessageCreate
 from app.services import message_service, session_service
-from app.workflows import get_interview_graph
+
+from app.core.graph import get_interview_graph
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class InterviewTurnRequest(BaseModel):
 # ============================================================================
 async def _stream_interview_turn(
     *,
+    graph,
     session_id: str,
     user_id: str,
     body: InterviewTurnRequest,
@@ -73,7 +75,6 @@ async def _stream_interview_turn(
       - Checkpoint exists with interrupt → subsequent turn → persist answer as user message, resume with answer
     """
 
-    graph = await get_interview_graph()
     config = {"configurable": {"thread_id": session_id}}
 
     try:
@@ -202,6 +203,7 @@ def _sanitize_output(node_output: dict) -> dict:
 async def interview_turn(
     session_id: uuid.UUID,
     body: InterviewTurnRequest,
+    graph: Any = Depends(get_interview_graph),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -227,6 +229,7 @@ async def interview_turn(
     # --- Stream the interview turn -----------------------------------------
 
     stream = _stream_interview_turn(
+        graph=graph,
         session_id=str(session_id),
         user_id=str(current_user.id),
         body=body,

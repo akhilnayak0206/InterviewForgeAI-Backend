@@ -1,3 +1,3 @@
-from app.workflows.interview_graph import get_interview_graph
+from app.workflows.interview_graph import build_interview_workflow
 
-__all__ = ["get_interview_graph"]
+__all__ = ["build_interview_workflow"]

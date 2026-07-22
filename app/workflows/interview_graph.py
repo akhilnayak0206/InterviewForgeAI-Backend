@@ -49,6 +49,7 @@ HUMAN-IN-THE-LOOP:
 """
 
 from __future__ import annotations
+import logging
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
@@ -70,6 +71,8 @@ from app.workflows.interview_nodes import (
     wait_for_answer,
 )
 from app.workflows.interview_state import InterviewState
+
+logger = logging.getLogger(__name__)
 
 
 def build_interview_workflow() -> StateGraph:
@@ -152,34 +155,3 @@ def build_interview_workflow() -> StateGraph:
     workflow.add_edge("persist_results", END)
 
     return workflow
-
-
-async def get_interview_graph():
-    """
-    Build and compile the interview graph with PostgreSQL checkpointing.
-
-    This is an async function because the PostgreSQL checkpointer
-    needs an async connection setup.
-
-    The compiled graph is cached at module level after first call.
-    """
-
-    global _compiled_graph
-
-    if _compiled_graph is not None:
-        return _compiled_graph
-
-    workflow = build_interview_workflow()
-
-    # PostgreSQL checkpointer — uses the same DATABASE_URL as the app.
-    # LangGraph creates its own tables (checkpoints, checkpoint_writes, etc.)
-    checkpointer = AsyncPostgresSaver.from_conn_string(settings.DATABASE_URL)
-    await checkpointer.setup()
-
-    _compiled_graph = workflow.compile(checkpointer=checkpointer)
-
-    return _compiled_graph
-
-
-# Module-level cache for the compiled graph
-_compiled_graph = None

@@ -182,11 +182,15 @@ async def _stream_interview_turn(
         logger.exception("Interview workflow failed | session=%s: %s", session_id, exc)
         yield sse_error(f"Workflow failed: {exc!s}")
 
-def _sanitize_output(node_output: dict) -> dict:
+def _sanitize_output(node_output: dict | None | tuple) -> dict:
     """
     Remove internal fields from node output before sending to the frontend.
     The frontend doesn't need session_id, user_id, or internal routing fields.
     """
+    if node_output is None:
+        return {}
+    if isinstance(node_output, tuple):
+        return {}
     exclude_keys = {"session_id", "user_id", "is_first_turn", "error"}
     return {k: v for k, v in node_output.items() if k not in exclude_keys}
 

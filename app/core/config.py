@@ -54,5 +54,14 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
     ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
 
+    # — Document Upload Configuration
+    # Base directory for uploaded files. Each user gets a subdirectory.
+    # TO_DO: REPLACE THIS WITH A MOUNTED VOLUME OR OBJECT STORAGE ADAPTER (S3/GCS).
+    UPLOAD_DIR: str = "uploads"
+
+    # Maximum file size in bytes. 10 MB is generous for resumes and JDs.
+    # Anything larger is almost certainly not a resume.
+    MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
 
 settings = Settings()

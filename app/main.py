@@ -1,7 +1,7 @@
-from contextlib import asynccontextmanager
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -10,8 +10,16 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.database import engine
-from app.routes import auth_router, chat_router, message_router, session_router, user_router, interview_workflow_router
 from app.core.graph import close_checkpointer, init_checkpointer
+from app.documents.router import router as document_router
+from app.routes import (
+    auth_router,
+    chat_router,
+    interview_workflow_router,
+    message_router,
+    session_router,
+    user_router,
+)
 
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 HOST = os.getenv("HOST", "127.0.0.1")
@@ -123,6 +131,11 @@ app.include_router(
 
 app.include_router(
     interview_workflow_router,
+    prefix=settings.API_V1_STR,
+)
+
+app.include_router(
+    document_router,
     prefix=settings.API_V1_STR,
 )
 

@@ -6,10 +6,13 @@ This file defines the structure of the multi-turn interview workflow.
 
 WORKFLOW:
 
-    START
-      │
-      ▼
-    load_session → route_by_turn
+      START
+        │
+        ▼
+    load_session
+        │
+        ▼
+    retrieve_context → route_by_turn
               │
         ┌─────┴─────┐
         ▼           ▼
@@ -49,12 +52,11 @@ HUMAN-IN-THE-LOOP:
 """
 
 from __future__ import annotations
+
 import logging
 
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import END, START, StateGraph
 
-from app.core.config import settings
 from app.workflows.interview_nodes import (
     analyze_resume,
     determine_difficulty,
@@ -66,6 +68,7 @@ from app.workflows.interview_nodes import (
     load_session,
     persist_question,
     persist_results,
+    retrieve_context,
     route_by_turn,
     should_continue,
     wait_for_answer,
@@ -92,6 +95,9 @@ def build_interview_workflow() -> StateGraph:
     workflow.add_node("persist_question", persist_question)
     workflow.add_node("persist_results", persist_results)
 
+    # RAG node - retrieves document context before LLM nodes
+    workflow.add_node("retrieve_context", retrieve_context)
+
     # LLM nodes — first turn
     workflow.add_node("analyze_resume", analyze_resume)
     workflow.add_node("extract_skills", extract_skills)
@@ -112,8 +118,19 @@ def build_interview_workflow() -> StateGraph:
 
     # — Edges ——————————————————————————
 
-    # Entry: START → load_session
+    # Entry: START -> load_session -> retrieve_context -> route
     workflow.add_edge(START, "load_session")
+    workflow.add_edge("load_session", "retrieve_context")
+
+    # Conditional: route by turn type (after retrieval)
+    workflow.add_conditional_edges(
+        "retrieve_context",
+        route_by_turn,
+        {
+            "first_turn": "analyze_resume",
+            "subsequent_turn": "evaluate_answer",
+        },
+    )
 
     # Conditional: route by turn type
     workflow.add_conditional_edges(

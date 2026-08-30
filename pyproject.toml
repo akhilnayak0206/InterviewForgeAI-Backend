@@ -25,7 +25,13 @@ dependencies = [
     "langgraph-checkpoint-postgres>=2.0.0",
     "langchain-anthropic>=1.4.8",
     "pymupdf>=1.25.0",
+    "pgvector>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
+    "tiktoken>=0.7.0",
 ]
+
+[project.optional-dependencies] 
+dev = [ "ruff>=0.6.0",]
 
 [tool.pyright]
 include = ["app"]
@@ -39,3 +45,24 @@ warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
 files = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+"E", # pycodestyle errors
+"W", # pycodestyle warnings
+"F", # pyflakes
+"I", # isort
+"B", # flake8-bugbear
+"C4", # flake8-comprehensions
+"UP", # pyupgrade
+]
+ignore = [
+"E501", # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

@@ -47,6 +47,12 @@ class InterviewState(TypedDict, total=False):
     skills: list[str]
     difficulty: str
 
+    # -- Retrieved Context (set by retrieve_context node, read by LLM nodes) --
+    # Populated from vector search over the user's indexed documents.
+    # Empty string when no documents are indexed (graceful fallback).
+    resume_context: str
+    jd_context: str
+
     # — Interview Configuration —
     max_questions: int
     question_number: int

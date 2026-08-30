@@ -4,8 +4,9 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime
 
-from app.documents.models import DocumentStatus, DocumentType
 from pydantic import BaseModel, Field
+
+from app.documents.enums import DocumentStatus, DocumentType
 
 
 class DocumentResponse(BaseModel):
@@ -43,3 +44,18 @@ class PaginatedDocumentResponse(BaseModel):
     total: int
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
+
+
+class EmbeddingResponse(BaseModel):
+    """Response from the embedding pipeline.
+
+    Returned by POST /documents/{id}/embed.
+    Tells the client whether embedding succeeded and how many
+    chunks were created.
+    """
+
+    success: bool
+    document_id: uuid.UUID
+    chunks_created: int
+    total_tokens: int
+    error: str | None = None

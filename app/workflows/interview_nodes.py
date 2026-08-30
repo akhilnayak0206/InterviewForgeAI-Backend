@@ -27,6 +27,7 @@ from langgraph.types import interrupt
 from sqlmodel import select
 
 from app.db.session import SessionLocal
+from app.documents.models import DocumentType
 from app.models.base import MessageRole, SessionStatus
 from app.models.message import Message
 from app.models.session import InterviewSession
@@ -39,6 +40,8 @@ from app.prompts.workflow_prompts import (
     GENERATE_QUESTION_PROMPT,
     GENERATE_REPORT_PROMPT,
 )
+from app.rag.context_builder import build_resume_and_jd_context
+from app.rag.retriever import retrieve_by_document_type
 from app.workflows.interview_state import InterviewState
 from app.workflows.llm import get_workflow_llm
 
@@ -77,7 +80,7 @@ def load_session(state: InterviewState) -> dict:
             select(Message).where(
                 Message.session_id == session_id,
                 Message.role == MessageRole.assistant,
-                Message.is_deleted == False,
+                Message.is_deleted == False,  # noqa: E712
             )
         ).all()
 
@@ -143,14 +146,93 @@ def persist_results(state: InterviewState) -> dict:
         db_session = db.get(InterviewSession, session_id)
         if db_session:
             db_session.status = SessionStatus.completed
-            db_session.summary = (
-                f"Interview completed. Average score: {_avg_score(state)}/100"
-            )
+            db_session.summary = f"Interview completed. Average score: {_avg_score(state)}/100"
 
         db.commit()
 
     logger.info("Node: persist_results — session marked completed")
     return {"is_complete": True}
+
+
+# ============================================================
+# RAG NODE - retrieve context from indexed documents
+# ============================================================
+
+
+def retrieve_context(state: InterviewState) -> dict:
+    """Retrieve relevant context from the user's indexed documents.
+
+    Reads:  user_id, session_id
+    Writes: resume_context, jd_context
+
+    Runs before any LLM node. Queries pgvector for the user's
+    resume chunks and JD chunks, then builds formatted context
+    strings ready for prompt injection.
+
+    Fallback: if no documents are indexed (or retrieval fails),
+    returns empty strings. LLM nodes proceed without RAG context
+    and fall back to the raw resume_text from the request body.
+    """
+    logger.info("Node: retrieve_context - starting")
+
+    user_id = uuid.UUID(state["user_id"])
+    # session_id may not be linked to documents; retrieve user-wide chunks.
+    raw_session_id = state.get("session_id")
+    session_id = uuid.UUID(raw_session_id) if raw_session_id else None
+
+    try:
+        with SessionLocal() as db:
+            # Retrieve resume chunks for this user.
+            # Using retrieve_by_document_type (not query-based) because
+            # on the first turn we want ALL resume context, not just
+            # chunks matching a specific query. This preserves document
+            # structure (chunks ordered by chunk_index).
+            resume_chunks = retrieve_by_document_type(
+                db=db,
+                user_id=user_id,
+                document_type=DocumentType.resume,
+                session_id=session_id,
+                top_k=10,
+            )
+
+            jd_chunks = retrieve_by_document_type(
+                db=db,
+                user_id=user_id,
+                document_type=DocumentType.job_description,
+                session_id=session_id,
+                top_k=8,
+            )
+
+        resume_context, jd_context = build_resume_and_jd_context(
+            resume_chunks=resume_chunks,
+            jd_chunks=jd_chunks,
+        )
+
+        logger.info(
+            "Node: retrieve_context - resume_chunks=%d jd_chunks=%d "
+            "resume_ctx_len=%d jd_ctx_len=%d",
+            len(resume_chunks),
+            len(jd_chunks),
+            len(resume_context),
+            len(jd_context),
+        )
+
+        return {
+            "resume_context": resume_context,
+            "jd_context": jd_context,
+        }
+
+    except Exception as e:
+        # Retrieval failure should NOT crash the interview.
+        # Log the error and proceed without context.
+        logger.warning(
+            "Node: retrieve_context - failed, proceeding without RAG | error=%s",
+            str(e),
+        )
+        return {
+            "resume_context": "",
+            "jd_context": "",
+        }
 
 
 # ============================================================
@@ -170,7 +252,7 @@ async def analyze_resume(state: InterviewState) -> dict:
 
     prompt = ANALYZE_RESUME_PROMPT.format(resume_text=state["resume_text"])
     response = await llm.ainvoke(prompt)
-    analysis = response.content.strip()
+    analysis = response.content.strip()  # type: ignore
 
     logger.info("Node: analyze_resume — completed (%d chars)", len(analysis))
     return {"resume_analysis": analysis}
@@ -191,7 +273,7 @@ async def extract_skills(state: InterviewState) -> dict:
         resume_analysis=state["resume_analysis"],
     )
     response = await llm.ainvoke(prompt)
-    raw_skills = response.content.strip()
+    raw_skills = response.content.strip()  # type: ignore
 
     skills = [s.strip() for s in raw_skills.split(",") if s.strip()]
 
@@ -214,7 +296,7 @@ async def determine_difficulty(state: InterviewState) -> dict:
         skills=", ".join(state.get("skills", [])),
     )
     response = await llm.ainvoke(prompt)
-    raw = response.content.strip().lower()
+    raw = response.content.strip().lower()  # type: ignore
 
     # Validate — only accept known levels, default to "mid"
     difficulty = raw if raw in ("junior", "mid", "senior") else "mid"
@@ -243,12 +325,14 @@ async def generate_question(state: InterviewState) -> dict:
         skills=", ".join(state.get("skills", [])),
         difficulty=state.get("difficulty", "mid"),
         resume_analysis=state.get("resume_analysis", ""),
+        resume_context=state.get("resume_context", "") or "No resume context available.",
+        jd_context=state.get("jd_context", "") or "No job description available.",
         questions_asked="\n".join(f"- {q}" for q in existing_questions) or "None yet",
         question_number=question_number,
         max_questions=state.get("max_questions", 5),
     )
     response = await llm.ainvoke(prompt)
-    question = response.content.strip()
+    question = response.content.strip()  # type: ignore
 
     logger.info("Node: generate_question — q#%d generated", question_number)
 
@@ -273,9 +357,11 @@ async def evaluate_answer(state: InterviewState) -> dict:
         question=state["current_question"],
         answer=state["current_answer"],
         difficulty=state.get("difficulty", "mid"),
+        resume_context=state.get("resume_context", "") or "No resume context available.",
+        jd_context=state.get("jd_context", "") or "No job description available.",
     )
     response = await llm.ainvoke(prompt)
-    evaluation_text = response.content.strip()
+    evaluation_text = response.content.strip()  # type: ignore
 
     score = _parse_score(evaluation_text)
 
@@ -303,9 +389,10 @@ async def generate_feedback(state: InterviewState) -> dict:
         answer=state["current_answer"],
         evaluation=state["current_evaluation"],
         score=state["current_score"],
+        jd_context=state.get("jd_context", "") or "No job description available.",
     )
     response = await llm.ainvoke(prompt)
-    feedback = response.content.strip()
+    feedback = response.content.strip()  # type: ignore
 
     logger.info("Node: generate_feedback — completed")
     return {"current_feedback": feedback}
@@ -336,9 +423,10 @@ async def generate_report(state: InterviewState) -> dict:
         total_questions=len(questions),
         questions_and_scores=questions_and_scores or "No questions were asked.",
         average_score=_avg_score(state),
+        jd_context=state.get("jd_context", "") or "No job description available.",
     )
     response = await llm.ainvoke(prompt)
-    report = response.content.strip()
+    report = response.content.strip()  # type: ignore
 
     logger.info("Node: generate_report — completed")
     return {"final_report": report}

@@ -1,20 +1,23 @@
+# ruff: noqa: B008
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from sqlmodel import Session
 
 from app.core.deps import get_current_active_user
 from app.db.session import get_db
+from app.documents import embedding_pipeline
 from app.documents import service as document_service
-from app.documents.models import DocumentType
+from app.documents.enums import DocumentType
 from app.documents.schemas import (
     DocumentDetailResponse,
     DocumentResponse,
+    EmbeddingResponse,
     PaginatedDocumentResponse,
 )
 from app.models.user import User
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
-from sqlmodel import Session
 
 router = APIRouter(
     prefix="/documents",
@@ -33,7 +36,7 @@ async def upload_document(
         ...,
         description="Type of document: 'resume' or 'job_description'",
     ),
-    session_id: Optional[uuid.UUID] = Query(
+    session_id: uuid.UUID | None = Query(
         default=None,
         description="Optional interview session to link this document to",
     ),
@@ -76,11 +79,11 @@ async def upload_document(
     summary="List your documents",
 )
 def list_documents(
-    session_id: Optional[uuid.UUID] = Query(
+    session_id: uuid.UUID | None = Query(
         default=None,
         description="Filter by interview session",
     ),
-    document_type: Optional[DocumentType] = Query(
+    document_type: DocumentType | None = Query(
         default=None,
         description="Filter by document type",
     ),
@@ -101,7 +104,7 @@ def list_documents(
     )
 
     return PaginatedDocumentResponse(
-        items=items,
+        items=[DocumentResponse.model_validate(document) for document in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -139,4 +142,45 @@ def delete_document(
         db=db,
         document_id=document_id,
         user_id=current_user.id,
+    )
+
+
+@router.post(
+    "/{document_id}/embed",
+    response_model=EmbeddingResponse,
+    summary="Embed a processed document for semantic search",
+)
+def embed_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Run the embedding pipeline on a processed document.
+
+    Chunks the document text, generates vector embeddings via OpenAI,
+    and stores them in the database for future semantic search.
+
+    Preconditions:
+        - Document must be in 'processed' or 'indexed' status.
+        - Calling on an 'indexed' document re-embeds it (idempotent).
+
+    Returns embedding metrics: chunks created, tokens consumed.
+    """
+    document = document_service.get_document_for_user(
+        db=db,
+        document_id=document_id,
+        user_id=current_user.id,
+    )
+
+    result = embedding_pipeline.embed_document(
+        db=db,
+        document=document,
+    )
+
+    return EmbeddingResponse(
+        success=result.success,
+        document_id=result.document_id,
+        chunks_created=result.chunks_created,
+        total_tokens=result.total_tokens,
+        error=result.error,
     )

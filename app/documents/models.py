@@ -1,48 +1,16 @@
-
 import uuid
-from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
-from app.models.base import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 from sqlalchemy import Column, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship
 
+from app.documents.enums import DocumentStatus, DocumentType
+from app.models.base import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
+
 if TYPE_CHECKING:
     from app.models.session import InterviewSession
     from app.models.user import User
-
-
-class DocumentType(str, Enum):
-    """What kind of document was uploaded.
-
-    This matters because processing logic may differ:
-    - Resumes have structured sections (Experience, Education, Skills)
-    - Job descriptions have different structures (Requirements, Responsibilities)
-    """
-
-    resume = "resume"
-    job_description = "job_description"
-
-
-class DocumentStatus(str, Enum):
-    """Processing state machine for a document.
-
-    Transitions:
-        uploading  -> uploaded    (file stored successfully)
-        uploaded   -> extracting  (extraction started)
-        extracting -> processed   (text extracted and cleaned)
-        extracting -> failed      (extraction error)
-        uploaded   -> failed      (validation error discovered post-upload)
-
-    Any state can transition to failed. Only processed is a terminal success.
-    """
-
-    uploading = "uploading"
-    uploaded = "uploaded"
-    extracting = "extracting"
-    processed = "processed"
-    failed = "failed"
 
 
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, table=True):
@@ -98,9 +66,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, table=True)
     # SHA-256 hash of the raw file bytes.
     # Used for duplicate detection: same bytes -> same checksum.
     # Indexed for fast lookups during dedup checks.
-    checksum: str = Field(
-        sa_column=Column(String(length=64), nullable=False, index=True)
-    )
+    checksum: str = Field(sa_column=Column(String(length=64), nullable=False, index=True))
 
     # — Extracted Content —
     # Full cleaned text after extraction + normalization.

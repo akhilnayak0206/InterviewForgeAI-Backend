@@ -85,6 +85,12 @@ CANDIDATE SKILLS: {skills}
 DIFFICULTY LEVEL: {difficulty}
 RESUME ANALYSIS: {resume_analysis}
 
+CANDIDATE'S RESUME CONTEXT:
+{resume_context}
+
+JOB DESCRIPTION REQUIREMENTS:
+{jd_context}
+
 QUESTIONS ALREADY ASKED:
 {questions_asked}
 
@@ -94,11 +100,14 @@ TASK:
 Generate ONE focused technical interview question for this candidate.
 
 RULES:
-- Target one of their listed skills
+- Target their actual experience from the resume context above
+- Align with what the job description requires
 - Match the difficulty level above
 - Do NOT repeat any topic from questions already asked
 - The question should require a thoughtful answer, not just a definition
 - Be specific enough to evaluate deep understanding
+- Reference specific projects, technologies, or achievements from the
+  resume when possible
 - Keep the question concise (2-3 sentences max)
 
 FORMAT:
@@ -116,14 +125,23 @@ CANDIDATE'S ANSWER:
 
 DIFFICULTY LEVEL: {difficulty}
 
+CANDIDATE'S RESUME CONTEXT:
+{resume_context}
+
+JOB DESCRIPTION REQUIREMENTS:
+{jd_context}
+
 TASK:
 Evaluate the answer objectively, calibrated to the difficulty level.
+Consider whether the answer aligns with the candidate's actual experience
+(from resume context) and the role requirements (from job description).
 
 PROVIDE:
-1. Accuracy — Is it technically correct?
-2. Depth — Deep understanding or surface knowledge?
-3. Completeness — Did they cover the key points?
-4. Communication — Was it clear and well-structured?
+1. Accuracy - Is it technically correct?
+2. Depth - Deep understanding or surface knowledge?
+3. Completeness - Did they cover the key points?
+4. Relevance - Does it demonstrate skills the job requires?
+5. Communication - Was it clear and well-structured?
 
 FORMAT:
 Score: [number 0-100]
@@ -147,13 +165,18 @@ EVALUATION:
 
 SCORE: {score}/100
 
+JOB DESCRIPTION REQUIREMENTS:
+{jd_context}
+
 TASK:
 Provide constructive feedback to help the candidate improve.
+Align feedback with what the target role requires (from job description
+above).
 
 INCLUDE:
 1. What they did well (be specific)
 2. What they missed or got wrong (be specific)
-3. Key points they should have covered
+3. Key points they should have covered, especially for the target role
 4. One actionable improvement tip
 
 TONE: Encouraging but honest. Specific, not generic.
@@ -174,15 +197,23 @@ QUESTIONS AND SCORES:
 
 AVERAGE SCORE: {average_score}/100
 
+JOB DESCRIPTION REQUIREMENTS:
+{jd_context}
+
 TASK:
 Generate a comprehensive final interview report.
+Assess the candidate's readiness for the specific role described in the job
+description.
 
 INCLUDE:
-1. **Overall Performance** — Summary of how the candidate did
-2. **Strengths** — Topics where they scored well (be specific)
-3. **Areas for Improvement** — Topics where they struggled (be specific)
-4. **Recommendations** — 3-5 specific actions to improve
-5. **Readiness Assessment** — Are they ready for a real interview at this level?
+1. **Overall Performance** - Summary of how the candidate did
+2. **Strengths** - Topics where they scored well (be specific)
+3. **Areas for Improvement** - Topics where they struggled (be specific)
+4. **Role Fit** - How well their performance aligns with the job
+   requirements
+5. **Recommendations** - 3-5 specific actions to improve for this role
+6. **Readiness Assessment** - Are they ready for a real interview for this
+   specific role?
 
 FORMAT:
 Use markdown headings and bullet points. Keep it under 400 words.

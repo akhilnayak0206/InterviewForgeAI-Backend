@@ -165,6 +165,7 @@ def _embed_batch_with_retry(
             response = client.embeddings.create(
                 input=texts,
                 model=model,
+                encoding_format="float",
             )
 
             embeddings = [item.embedding for item in response.data]

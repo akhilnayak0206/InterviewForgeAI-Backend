@@ -4,7 +4,6 @@ import logging
 import uuid
 from collections.abc import Sequence
 from datetime import UTC
-from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, UploadFile, status
 from sqlmodel import Session, func, select
@@ -15,6 +14,7 @@ from app.documents.extractor import (
     extract_text_from_pdf,
     extract_text_from_plain_text,
 )
+from app.documents.models import Document
 from app.documents.storage import (
     compute_checksum,
     generate_storage_filename,
@@ -22,10 +22,6 @@ from app.documents.storage import (
     save_file,
 )
 from app.documents.text_processing import normalize_text
-
-if TYPE_CHECKING:
-    from app.documents.models import Document
-
 
 logger = logging.getLogger(__name__)
 

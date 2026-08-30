@@ -229,11 +229,11 @@ def _vector_search(
             chunk_index,
             chunk_text,
             token_count,
-            1 - (embedding <=> :query_vector::vector) AS similarity
+            1 - (embedding <=> CAST(:query_vector AS vector)) AS similarity
         FROM document_chunks
         WHERE {where_sql}
-          AND 1 - (embedding <=> :query_vector::vector) >= :threshold
-        ORDER BY embedding <=> :query_vector::vector
+        AND 1 - (embedding <=> CAST(:query_vector AS vector)) >= :threshold
+        ORDER BY embedding <=> CAST(:query_vector AS vector)
         LIMIT :top_k
     """)
 

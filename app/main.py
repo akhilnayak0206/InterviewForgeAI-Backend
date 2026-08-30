@@ -1,9 +1,9 @@
 import logging
 import os
-import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -85,8 +85,7 @@ async def validation_exception_handler(
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
-            "detail": exc.errors(),
-            "body": exc.body,
+            "detail": jsonable_encoder(exc.errors()),
         },
     )
 
@@ -142,9 +141,7 @@ app.include_router(
 
 @app.get("/")
 def root():
-    return {
-        "message": "Hello from InterviewForgeAI backend"
-    }
+    return {"message": "Hello from InterviewForgeAI backend"}
 
 
 @app.get("/health")

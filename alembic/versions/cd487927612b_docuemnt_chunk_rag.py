@@ -4,6 +4,7 @@ Revision ID: cd487927612b
 Revises: d2e8b7c5a1f4
 Create Date: 2026-08-30 09:16:53.542804+00:00
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -47,8 +48,8 @@ def upgrade() -> None:
         sa.Column("document_type", sa.String(length=32), nullable=False),
         sa.Column("chunk_index", sa.Integer(), nullable=False),
         sa.Column("chunk_text", sa.Text(), nullable=False),
-        # pgvector's vector type - 1536 floats stored as a compact binary array.
-        sa.Column("embedding", Vector(1536), nullable=False),
+        # pgvector's vector type - 1024 floats stored as a compact binary array.
+        sa.Column("embedding", Vector(1024), nullable=False),
         sa.Column("embedding_model", sa.String(length=128), nullable=False),
         sa.Column("embedding_version", sa.String(length=32), nullable=False),
         sa.Column("token_count", sa.Integer(), nullable=False),
@@ -137,18 +138,10 @@ def downgrade() -> None:
     op.drop_index("ix_document_chunks_embedding_hnsw", table_name="document_chunks")
     op.drop_index("ix_document_chunks_document_order", table_name="document_chunks")
     op.drop_index("ix_document_chunks_user_type", table_name="document_chunks")
-    op.drop_index(
-        op.f("ix_document_chunks_document_type"), table_name="document_chunks"
-    )
-    op.drop_index(
-        op.f("ix_document_chunks_session_id"), table_name="document_chunks"
-    )
-    op.drop_index(
-        op.f("ix_document_chunks_user_id"), table_name="document_chunks"
-    )
-    op.drop_index(
-        op.f("ix_document_chunks_document_id"), table_name="document_chunks"
-    )
+    op.drop_index(op.f("ix_document_chunks_document_type"), table_name="document_chunks")
+    op.drop_index(op.f("ix_document_chunks_session_id"), table_name="document_chunks")
+    op.drop_index(op.f("ix_document_chunks_user_id"), table_name="document_chunks")
+    op.drop_index(op.f("ix_document_chunks_document_id"), table_name="document_chunks")
     op.drop_table("document_chunks")
     # Note: We do NOT drop the pgvector extension in downgrade.
     # Other tables or extensions might depend on it.

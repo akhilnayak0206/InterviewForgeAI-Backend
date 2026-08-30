@@ -29,7 +29,7 @@ from app.models.base import TimestampMixin, UUIDPrimaryKeyMixin
 # -- Constants --
 # Dimension count for the embedding model we use (text-embedding-3-small).
 # Changing models means changing this value AND re-embedding all chunks.
-EMBEDDING_DIMENSIONS = 1536
+EMBEDDING_DIMENSIONS = 1024
 
 
 class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, table=True):

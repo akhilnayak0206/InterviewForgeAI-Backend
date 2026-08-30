@@ -40,8 +40,8 @@ from app.prompts.workflow_prompts import (
     GENERATE_QUESTION_PROMPT,
     GENERATE_REPORT_PROMPT,
 )
-from app.rag.context_builder import build_resume_and_jd_context
-from app.rag.retriever import retrieve_by_document_type
+from app.rag.context_builder import build_context
+from app.rag.retriever import retrieve_by_document_type, retrieve_by_query
 from app.workflows.interview_state import InterviewState
 from app.workflows.llm import get_workflow_llm
 
@@ -159,42 +159,31 @@ def persist_results(state: InterviewState) -> dict:
 # ============================================================
 
 
-def retrieve_context(state: InterviewState) -> dict:
-    """Retrieve relevant context from the user's indexed documents.
+async def retrieve_context(state: InterviewState) -> dict:
+    """Retrieve resume chunks most relevant to the job description.
 
-    Reads:  user_id, session_id
-    Writes: resume_context, jd_context
+    Reads: user_id
+    Writes: resume_context
 
-    Runs before any LLM node. Queries pgvector for the user's
-    resume chunks and JD chunks, then builds formatted context
-    strings ready for prompt injection.
+    Flow:
+        1. Get JD chunks (if available)
+        2. Use LLM to extract key requirements from JD
+        3. Query resume with those requirements (semantic search)
+        4. Build resume_context from matched chunks
+        5. Return context for LLM nodes to use
 
-    Fallback: if no documents are indexed (or retrieval fails),
-    returns empty strings. LLM nodes proceed without RAG context
-    and fall back to the raw resume_text from the request body.
+    Fallback: if no JD or no resume chunks match, returns empty string.
+    LLM nodes proceed without RAG context and fall back to raw resume_text.
     """
     logger.info("Node: retrieve_context - starting")
 
     user_id = uuid.UUID(state["user_id"])
-    # session_id may not be linked to documents; retrieve user-wide chunks.
-    raw_session_id = state.get("session_id")
-    session_id = uuid.UUID(raw_session_id) if raw_session_id else None
+    session_id = uuid.UUID(state["session_id"]) if state.get("session_id") else None
+    llm = get_workflow_llm()
 
     try:
         with SessionLocal() as db:
-            # Retrieve resume chunks for this user.
-            # Using retrieve_by_document_type (not query-based) because
-            # on the first turn we want ALL resume context, not just
-            # chunks matching a specific query. This preserves document
-            # structure (chunks ordered by chunk_index).
-            resume_chunks = retrieve_by_document_type(
-                db=db,
-                user_id=user_id,
-                document_type=DocumentType.resume,
-                session_id=session_id,
-                top_k=10,
-            )
-
+            # Step 1: Get JD chunks (to understand what the role requires)
             jd_chunks = retrieve_by_document_type(
                 db=db,
                 user_id=user_id,
@@ -203,24 +192,61 @@ def retrieve_context(state: InterviewState) -> dict:
                 top_k=8,
             )
 
-        resume_context, jd_context = build_resume_and_jd_context(
-            resume_chunks=resume_chunks,
-            jd_chunks=jd_chunks,
-        )
+            resume_chunks = []
+            jd_query = None
 
-        logger.info(
-            "Node: retrieve_context - resume_chunks=%d jd_chunks=%d "
-            "resume_ctx_len=%d jd_ctx_len=%d",
-            len(resume_chunks),
-            len(jd_chunks),
-            len(resume_context),
-            len(jd_context),
-        )
+            # Step 2: If we have a JD, use LLM to extract key requirements
+            if jd_chunks:
+                jd_text = "\n".join([chunk.chunk_text for chunk in jd_chunks])
 
-        return {
-            "resume_context": resume_context,
-            "jd_context": jd_context,
-        }
+                # LLM extracts key skills/requirements from JD
+                extraction_prompt = f"""Extract the top 5 key technical skills and requirements from this job description.
+                Return as a comma-separated list, nothing else. Be concise.
+
+                JOB DESCRIPTION:
+                {jd_text}"""
+
+                response = await llm.ainvoke(extraction_prompt)
+                jd_query = response.content.strip()
+
+                logger.info(
+                    "Node: retrieve_context - extracted JD requirements: %s",
+                    jd_query,
+                )
+
+                # Step 3: Query resume with JD requirements (semantic search)
+                resume_chunks = retrieve_by_query(
+                    db=db,
+                    query=jd_query,
+                    user_id=user_id,
+                    document_type=DocumentType.resume,
+                    session_id=session_id,
+                    top_k=10,
+                )
+            else:
+                # No JD: fall back to getting all resume chunks in order
+                resume_chunks = retrieve_by_document_type(
+                    db=db,
+                    user_id=user_id,
+                    document_type=DocumentType.resume,
+                    session_id=session_id,
+                    top_k=10,
+                )
+
+            # Step 4: Build resume_context from matched chunks
+            resume_context = build_context(resume_chunks)
+
+            logger.info(
+                "Node: retrieve_context - resume_chunks=%d | resume_ctx_len=%d | jd_query=%s",
+                len(resume_chunks),
+                len(resume_context),
+                jd_query or "no_jd",
+            )
+
+            return {
+                "resume_context": resume_context,
+                "jd_context": jd_query or "",  # Extracted JD requirements (for reference)
+            }
 
     except Exception as e:
         # Retrieval failure should NOT crash the interview.

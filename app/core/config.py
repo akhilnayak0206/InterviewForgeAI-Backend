@@ -64,11 +64,11 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
 
     # -- Embedding Pipeline Configuration --
-    EMBEDDING_MODEL: str = "nvidia/nemotron-3-embed-1b:free"
+    EMBEDDING_MODEL: str = "liquid/lfm-2.5-embedding-350m:free"
 
     # Vector dimensions. Must match the model. Changing this requires
     # re-creating the vector column and re-embedding all chunks.
-    EMBEDDING_DIMENSIONS: int = 1536
+    EMBEDDING_DIMENSIONS: int = 1024
 
     # Pipeline version tag. Increment when you change chunking strategy,
     # overlap, preprocessing, or anything that changes what gets embedded
@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 200
 
     # -- Embedding API Parameters --
-    # Max chunks per API call. OpenAI supports up to 2048 inputs per batch.
+    # Max chunks per API call. OpenAI supports up to 1024 inputs per batch.
     # 100 is conservative and avoids timeouts on large documents.
     EMBEDDING_BATCH_SIZE: int = 100
 

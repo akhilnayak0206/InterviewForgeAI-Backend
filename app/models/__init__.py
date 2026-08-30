@@ -1,8 +1,5 @@
 """Import every table model here for SQLModel metadata registration."""
 
-from app.documents.chunk_models import DocumentChunk
-from app.documents.models import Document
-
 from .base import CreatedAtMixin, MessageRole, SessionStatus, TimestampMixin, UUIDPrimaryKeyMixin
 from .message import Message
 from .session import InterviewSession
@@ -17,6 +14,4 @@ __all__ = [
     "UUIDPrimaryKeyMixin",
     "CreatedAtMixin",
     "TimestampMixin",
-    "Document",
-    "DocumentChunk",
 ]

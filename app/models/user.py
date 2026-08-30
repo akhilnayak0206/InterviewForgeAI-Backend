@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, Column, String
 from sqlmodel import Field, Relationship
 
-from app.documents.models import Document
-
 if TYPE_CHECKING:
+    from app.documents.models import Document
+
     from .session import InterviewSession
 
 from .base import TimestampMixin, UUIDPrimaryKeyMixin
@@ -24,11 +24,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, table=True):
 
     # FIX: Clean standard list type hint + production optimization argument
     sessions: list["InterviewSession"] = Relationship(
-        back_populates="user",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        back_populates="user", sa_relationship_kwargs={"lazy": "selectin"}
     )
 
     documents: list["Document"] = Relationship(
-        back_populates="user",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        back_populates="user", sa_relationship_kwargs={"lazy": "selectin"}
     )

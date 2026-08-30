@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sqlmodel import Session, select
 
@@ -32,7 +33,9 @@ from app.documents.chunk_models import DocumentChunk
 from app.documents.chunking import ChunkResult, chunk_text
 from app.documents.embedding_service import EmbeddingError, embed_texts
 from app.documents.enums import DocumentStatus
-from app.documents.models import Document
+
+if TYPE_CHECKING:
+    from app.documents.models import Document
 
 logger = logging.getLogger(__name__)
 

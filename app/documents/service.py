@@ -3,13 +3,18 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Sequence
+from datetime import UTC
+from typing import TYPE_CHECKING
+
+from fastapi import HTTPException, UploadFile, status
+from sqlmodel import Session, func, select
 
 from app.core.config import settings
+from app.documents.enums import DocumentStatus, DocumentType
 from app.documents.extractor import (
     extract_text_from_pdf,
     extract_text_from_plain_text,
 )
-from app.documents.models import Document, DocumentStatus, DocumentType
 from app.documents.storage import (
     compute_checksum,
     generate_storage_filename,
@@ -17,8 +22,10 @@ from app.documents.storage import (
     save_file,
 )
 from app.documents.text_processing import normalize_text
-from fastapi import HTTPException, UploadFile, status
-from sqlmodel import Session, func, select
+
+if TYPE_CHECKING:
+    from app.documents.models import Document
+
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +182,7 @@ async def upload_document(
 
 # — Query Functions —
 
+
 def get_document_for_user(
     *,
     db: Session,
@@ -235,15 +243,9 @@ def get_documents_by_user(
     if document_type is not None:
         base = base.where(Document.document_type == document_type)
 
-    total = db.exec(
-        select(func.count()).select_from(base.subquery())
-    ).one()
+    total = db.exec(select(func.count()).select_from(base.subquery())).one()
 
-    items = db.exec(
-        base.order_by(Document.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    ).all()
+    items = db.exec(base.order_by(Document.created_at.desc()).offset(offset).limit(limit)).all()
 
     return items, total
 
@@ -260,7 +262,7 @@ def soft_delete_document(
     Does NOT delete the file from storage - that's a future cleanup concern.
     Keeping files allows for undo and audit trails.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     document = get_document_for_user(
         db=db,
@@ -269,7 +271,7 @@ def soft_delete_document(
     )
 
     document.is_deleted = True
-    document.deleted_at = datetime.now(timezone.utc)
+    document.deleted_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(document)
@@ -283,6 +285,7 @@ def soft_delete_document(
 # These are private functions (prefixed with _) because they're only
 # called from within this module. They raise HTTPException for
 # client-fixable errors.
+
 
 def _validate_mime_type(
     *,
@@ -369,7 +372,6 @@ def _check_duplicate(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"This file has already been uploaded "
-                f"(original: '{existing.original_filename}')."
+                f"This file has already been uploaded (original: '{existing.original_filename}')."
             ),
         )

@@ -7,11 +7,11 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 # Notice: Mapped is completely gone from imports
 from sqlmodel import Field, Relationship
 
-from app.documents.models import Document
-
 from .base import SessionStatus, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.documents.models import Document
+
     from .message import Message
     from .user import User
 
@@ -43,16 +43,12 @@ class InterviewSession(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, tab
         sa_column=Column(Text),
     )
 
-    user: Optional["User"] = Relationship(
-        back_populates="sessions"
-    )
+    user: Optional["User"] = Relationship(back_populates="sessions")
 
     messages: list["Message"] = Relationship(
-        back_populates="session",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        back_populates="session", sa_relationship_kwargs={"lazy": "selectin"}
     )
 
     documents: list["Document"] = Relationship(
-        back_populates="session",
-        sa_relationship_kwargs={"lazy": "selectin"}
+        back_populates="session", sa_relationship_kwargs={"lazy": "selectin"}
     )

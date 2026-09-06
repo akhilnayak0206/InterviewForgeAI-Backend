@@ -1,0 +1,33 @@
+# — Docker Compose – Development Overrides ————————
+#
+# Use this alongside docker-compose.yml for development features:
+#   - Source code mounted for hot reload
+#   - Uvicorn --reload enabled
+#   - Debug mode on
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Why a separate file?
+#   - docker-compose.yml is production-like (immutable image, no reload)
+#   - This file overrides specific settings for development convenience
+#   - Production never uses this file
+
+services:
+  api:
+    # Mount source code into the container. Changes on your host
+    # are immediately visible inside the container.
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads
+    # Override the startup command to enable hot reload.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      - RUN_MIGRATIONS=true
+      - DEBUG=true
+
+  worker:
+    # Mount source code so worker picks up code changes on restart.
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads

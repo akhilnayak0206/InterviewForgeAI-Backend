@@ -1,0 +1,60 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+env/
+
+# Environment files (secrets!)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in image)
+*.md
+docs/
+TEST-SECTION-*/
+SECTION-*.md
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Uploads (user data, not baked into image)
+uploads/
+
+# Tests (optional: exclude from production image)
+tests/
+test_*.py
+
+# Logs
+*.log
+logs/
+
+# Node (if frontend is in same repo)
+node_modules/

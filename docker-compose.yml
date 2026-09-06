@@ -1,0 +1,38 @@
+  # — Worker ————————
+  # Background job processor. Same image as the API, different command.
+  # Runs ARQ to poll Redis for jobs and process them.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forgeai-worker
+    restart: unless-stopped
+    entrypoint: ["./scripts/start-worker.sh"]
+    # No 'command' — the entrypoint script handles everything.
+    # No 'ports' — the worker doesn't serve HTTP.
+    env_file:
+      - .env.docker
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Check if the ARQ worker process (PID 1) is alive.
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    # Give the worker time to finish its current job before killing it.
+    stop_grace_period: 60s
+  # — Volumes ————————
+  # Named volumes are managed by Docker and persist across container
+  # restarts. They are NOT deleted when you run `docker compose down`.
+  # They ARE deleted when you run `docker compose down -v`.
+  volumes:
+    postgres_data:
+      name: forgeai_postgres_data
+    uploads_data:
+      name: forgeai_uploads_data

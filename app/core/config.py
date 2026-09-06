@@ -2,6 +2,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Identifies the runtime context: development, staging, production.
+    # Used for log levels, feature flags, and configuration validation.
+    ENVIRONMENT: str = "development"
+
     DATABASE_URL: str | None = None
     DB_ECHO: bool = False
 
@@ -101,6 +105,28 @@ class Settings(BaseSettings):
 
     # OpenRouter base URL for embeddings.
     OPENROUTER_BASE_URL: str | None = None
+
+    # -- Redis Configuration --
+    # Redis serves two roles in this application:
+    #   1. Job queue broker (ARQ) — uses REDIS_DB
+    #   2. Application cache/rate-limit/locks — uses REDIS_CACHE_DB
+    # Separate databases prevent ARQ keys from colliding with app keys.
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_CACHE_DB: int = 1
+    REDIS_MAX_CONNECTIONS: int = 20
+
+    # -- Rate Limiting Configuration --
+    # Per-user chat/LLM rate limit
+    RATE_LIMIT_CHAT_MAX: int = 20
+    RATE_LIMIT_CHAT_WINDOW: int = 60
+    # Per-user embedding rate limit
+    RATE_LIMIT_EMBED_MAX: int = 5
+    RATE_LIMIT_EMBED_WINDOW: int = 60
+    # Per-IP auth rate limit (login, register)
+    RATE_LIMIT_AUTH_MAX: int = 10
+    RATE_LIMIT_AUTH_WINDOW: int = 60
 
 
 settings = Settings()

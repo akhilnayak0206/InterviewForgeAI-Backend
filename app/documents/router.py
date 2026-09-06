@@ -3,21 +3,23 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlmodel import Session
 
 from app.core.deps import get_current_active_user
 from app.db.session import get_db
-from app.documents import embedding_pipeline
 from app.documents import service as document_service
-from app.documents.enums import DocumentType
+from app.documents.enums import DocumentStatus, DocumentType
 from app.documents.schemas import (
     DocumentDetailResponse,
     DocumentResponse,
-    EmbeddingResponse,
     PaginatedDocumentResponse,
 )
+from app.jobs.enums import JobType
+from app.jobs.queue import enqueue_job
 from app.models.user import User
+from app.schemas.job import JobResponse
+from app.services import job as job_service
 
 router = APIRouter(
     prefix="/documents",
@@ -147,40 +149,58 @@ def delete_document(
 
 @router.post(
     "/{document_id}/embed",
-    response_model=EmbeddingResponse,
-    summary="Embed a processed document for semantic search",
+    response_model=JobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Queue a document for embedding (background job)",
 )
-def embed_document(
+async def embed_document(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Run the embedding pipeline on a processed document.
+    """Queue the embedding pipeline as a background job.
 
-    Chunks the document text, generates vector embeddings via OpenAI,
-    and stores them in the database for future semantic search.
+    Instead of running embedding synchronously (which could take 5-30
+    seconds and block the HTTP connection), this endpoint:
+        1. Validates the document exists and is in the right status
+        2. Creates a Job record in the database
+        3. Enqueues the job for a background worker
+        4. Returns 202 Accepted with the job_id
+
+    The client can poll GET /jobs/{job_id} to check progress.
 
     Preconditions:
         - Document must be in 'processed' or 'indexed' status.
         - Calling on an 'indexed' document re-embeds it (idempotent).
-
-    Returns embedding metrics: chunks created, tokens consumed.
     """
+    # Validate document ownership and existence
     document = document_service.get_document_for_user(
         db=db,
         document_id=document_id,
         user_id=current_user.id,
     )
 
-    result = embedding_pipeline.embed_document(
+    # Validate document is in a state that can be embedded
+    if document.status not in (DocumentStatus.processed, DocumentStatus.indexed):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Document must be in 'processed' or 'indexed' status, got '{document.status}'"
+            ),
+        )
+
+    # Create a durable job record FIRST (before enqueuing)
+    job = job_service.create_job(
         db=db,
-        document=document,
+        user_id=current_user.id,
+        job_type=JobType.embed_document,
+        payload={"document_id": str(document_id)},
     )
 
-    return EmbeddingResponse(
-        success=result.success,
-        document_id=result.document_id,
-        chunks_created=result.chunks_created,
-        total_tokens=result.total_tokens,
-        error=result.error,
+    # Enqueue to Redis for background processing
+    await enqueue_job(
+        job_id=job.id,
+        job_type=JobType.embed_document,
     )
+
+    return JobResponse.model_validate(job)

@@ -7,15 +7,19 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import engine
 from app.core.graph import close_checkpointer, init_checkpointer
 from app.documents.router import router as document_router
+from app.jobs.queue import close_arq_pool
+from app.redis.client import close_redis_pool, init_redis_pool
 from app.routes import (
     auth_router,
     chat_router,
     interview_workflow_router,
+    job_router,
     message_router,
     session_router,
     user_router,
@@ -52,10 +56,16 @@ async def lifespan(app: FastAPI):
         print(error)
         print("Workflows will not be available.")
 
+    # Initialize Redis pool for cache, rate limiting, and locks.
+    # If Redis is unavailable, features degrade gracefully.
+    await init_redis_pool()
+
     yield
 
     # Cleanup: close the checkpointer pool
     await close_checkpointer()
+    await close_arq_pool()
+    await close_redis_pool()
     print("Application shutting down")
 
 
@@ -138,6 +148,11 @@ app.include_router(
     prefix=settings.API_V1_STR,
 )
 
+app.include_router(
+    job_router,
+    prefix=settings.API_V1_STR,
+)
+
 
 @app.get("/")
 def root():
@@ -146,10 +161,31 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {
-        "status": "healthy",
+    checks = {
         "service": "InterviewForgeAI Backend",
+        "environment": settings.ENVIRONMENT,
     }
+
+    # Check database connectivity
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "connected"
+    except Exception:
+        checks["database"] = "unavailable"
+
+    # Check Redis connectivity
+    from app.redis.client import get_redis_client
+
+    redis_client = get_redis_client()
+    checks["redis"] = "connected" if redis_client is not None else "unavailable"
+
+    # Overall status: healthy if database is connected
+    # (Redis is optional — the app degrades gracefully without it)
+    checks["status"] = "healthy" if checks["database"] == "connected" else "degraded"
+
+    status_code = 200 if checks["status"] == "healthy" else 503
+    return JSONResponse(content=checks, status_code=status_code)
 
 
 if __name__ == "__main__":

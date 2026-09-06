@@ -1,8 +1,9 @@
 """Schemas module for Pydantic request/response models"""
 
-from .user import UserCreate, UserResponse
-from .session import PaginatedSessionResponse, SessionCreate, SessionResponse
+from .job import JobResponse, PaginatedJobResponse
 from .message import MessageCreate, MessageResponse, PaginatedMessageResponse
+from .session import PaginatedSessionResponse, SessionCreate, SessionResponse
+from .user import UserCreate, UserResponse
 
 __all__ = [
     "UserCreate",
@@ -13,4 +14,6 @@ __all__ = [
     "MessageCreate",
     "MessageResponse",
     "PaginatedMessageResponse",
+    "JobResponse",
+    "PaginatedJobResponse",
 ]

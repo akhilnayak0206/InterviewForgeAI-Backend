@@ -47,3 +47,6 @@ uv run alembic revision --autogenerate -m "create users table"
 
 uv run alembic upgrade head
 
+# for arq workers
+arq app.jobs.worker.WorkerSettings      
+

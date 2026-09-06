@@ -1,38 +1,195 @@
-  # — Worker ————————
+# ── Docker Compose – Production-Like Local Environment ──────────────
+# Starts all services needed to run the AI Interview Coach:
+#   - PostgreSQL (with pgvector for embeddings)
+#   - Redis (job queue, cache, rate limiting, locks)
+#   - FastAPI (HTTP API)
+#   - Worker (background job processing)
+#
+# Usage:
+#   docker compose up              # Start all services
+#   docker compose up -d           # Start in background
+#   docker compose down            # Stop all services
+#   docker compose down -v         # Stop and DELETE all data (volumes)
+#   docker compose logs -f api     # Follow API logs
+#   docker compose exec postgres psql -U forgeai -d forgeai  # DB shell
+#
+# IMPORTANT: Copy .env.docker.example to .env.docker and fill in secrets.
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────
+  # PostgreSQL + pgvector
+  #
+  # The pgvector/pgvector image is standard PostgreSQL with the
+  # vector extension pre-compiled.
+  # It behaves identically to the official postgres image.
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: forgeai-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: forgeai
+      POSTGRES_PASSWORD: forgeai
+      POSTGRES_DB: interview_forge
+
+    ports:
+      # Map to host:5433 to avoid conflicting with local PostgreSQL.
+      # Other containers use postgres:5432 (internal Docker network).
+      - "5433:5432"
+
+    volumes:
+      # Named volume for persistent data.
+      # Data persists across container restarts.
+      # Only `docker compose down -v` or `docker volume rm` deletes it.
+      - postgres_data:/var/lib/postgresql/data
+
+      # Init script: enable pgvector extension on first database creation.
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init-pgvector.sql:ro
+
+    healthcheck:
+      # pg_isready checks if PostgreSQL is accepting connections.
+      # This is more reliable than just checking if the process is running.
+      test: ["CMD-SHELL", "pg_isready -U forgeai -d interview_forge"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+
+  # ── Redis ──────────────────────────────────────────────────────────
+  #
+  # Redis serves two roles:
+  #   1. ARQ job queue broker (DB 0)
+  #   2. Application cache, rate limiting, locks (DB 1)
+  #
+  # We use alpine for minimal image size (~30 MB).
+
+  redis:
+    image: redis:7-alpine
+    container_name: forgeai-redis
+    restart: unless-stopped
+
+    ports:
+      # Map to host:6380 to avoid conflicting with local Redis.
+      # Other containers use redis:6379 (internal Docker network).
+      - "6380:6379"
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+
+  # ── FastAPI ────────────────────────────────────────────────────────
+  #
+  # The HTTP API. Builds from our multi-stage Dockerfile.
+  # Uses the entrypoint script to optionally run migrations.
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: forgeai-api
+    restart: unless-stopped
+
+    # Entrypoint handles migrations, then exec's the CMD.
+    entrypoint: ["./scripts/entrypoint.sh"]
+
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      # Load environment variables from .env.docker.
+      # This file contains Docker-specific hostnames (postgres, redis).
+      - .env.docker
+
+    environment:
+      # Run migrations on startup (safe for single-instance local dev).
+      # In production, run migrations as a separate deployment step.
+      - RUN_MIGRATIONS=true
+
+    volumes:
+      # Persist uploaded files across container restarts.
+      - uploads_data:/app/uploads
+
+    depends_on:
+      # Wait for PostgreSQL AND Redis to be HEALTHY before starting.
+      # Without this, the API might start before the database is ready.
+
+      postgres:
+        condition: service_healthy
+
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "python", "scripts/docker-healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    # Give the API 30 seconds to drain connections during shutdown.
+    stop_grace_period: 30s
+
+
+  # ── Worker ─────────────────────────────────────────────────────────
+  #
   # Background job processor. Same image as the API, different command.
   # Runs ARQ to poll Redis for jobs and process them.
+
   worker:
     build:
       context: .
       dockerfile: Dockerfile
+
     container_name: forgeai-worker
     restart: unless-stopped
+
     entrypoint: ["./scripts/start-worker.sh"]
-    # No 'command' — the entrypoint script handles everything.
-    # No 'ports' — the worker doesn't serve HTTP.
+
+    # No 'command' - the entrypoint script handles everything.
+    # No 'ports' - the worker doesn't serve HTTP.
+
     env_file:
       - .env.docker
+
     volumes:
       - uploads_data:/app/uploads
+
     depends_on:
       postgres:
         condition: service_healthy
+
       redis:
         condition: service_healthy
+
     healthcheck:
       # Check if the ARQ worker process (PID 1) is alive.
       test: ["CMD-SHELL", "kill -0 1"]
       interval: 10s
       timeout: 5s
       retries: 3
+
     # Give the worker time to finish its current job before killing it.
     stop_grace_period: 60s
-  # — Volumes ————————
-  # Named volumes are managed by Docker and persist across container
-  # restarts. They are NOT deleted when you run `docker compose down`.
-  # They ARE deleted when you run `docker compose down -v`.
-  volumes:
-    postgres_data:
-      name: forgeai_postgres_data
-    uploads_data:
-      name: forgeai_uploads_data
+
+
+# ── Volumes ──────────────────────────────────────────────────────────
+#
+# Named volumes are managed by Docker and persist across container
+# restarts. They are NOT deleted when you run `docker compose down`.
+# They ARE deleted when you run `docker compose down -v`.
+
+volumes:
+  postgres_data:
+    name: forgeai_postgres_data
+
+  uploads_data:
+    name: forgeai_uploads_data
